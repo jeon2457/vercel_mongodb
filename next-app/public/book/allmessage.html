@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko-KR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>문자메시지 보내기</title>
+    <!-- 부트스트랩 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        /* 모바일 환경 고려하여 테이블 영역 스크롤 추가 */
+        .table-responsive {
+            max-height: 350px;
+            overflow-y: auto;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4 mb-5">
+        <h4 class="mb-3 text-center fw-bold">문자메시지 보내기</h4>
+        
+        <form>
+            <div class="mb-3">
+                <textarea class="form-control" id="messageContent" rows="4" placeholder="보내실 내용을 입력하세요."></textarea>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0 fw-bold">회원 목록</h6>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="toggleAddMemberBtn">회원추가</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="toggleEditMemberBtn">회원수정</button>
+                </div>
+            </div>
+
+            <!-- 회원 추가/수정 폼 (기본 숨김) -->
+            <div class="card mb-3 hidden" id="addMemberForm">
+                <div class="card-body bg-light">
+                    <div class="alert alert-info py-2 px-3 mb-2" style="font-size: 0.8rem;" role="alert">
+                        ※ 이 코드는 HTML코드이므로 회원추가는 일회용으로 사용할 수 있으므로 참고바랍니다!
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <input type="text" class="form-control form-control-sm" id="newName" placeholder="이름" />
+                        </div>
+                        <div class="col-8">
+                            <input type="text" class="form-control form-control-sm" id="newPhone" placeholder="휴대폰번호 입력" maxlength="13" />
+                        </div>
+                        <div class="col-12 mt-2 d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-success w-100" id="confirmAddBtn">확인 (추가)</button>
+                            <button type="button" class="btn btn-sm btn-danger w-100 hidden" id="deleteMemberBtn">삭제</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 회원 목록 테이블 -->
+            <div class="table-responsive border mb-3">
+                <table class="table table-sm table-hover text-center mb-0 align-middle">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th style="width: 40px;">
+                                <input class="form-check-input" type="checkbox" id="checkAll">
+                            </th>
+                            <th>이름</th>
+                            <th>전화번호</th>
+                        </tr>
+                    </thead>
+                    <tbody id="memberListBody">
+                        <!-- JS를 통해 데이터 렌더링 됨 -->
+                    </tbody>
+                </table>
+            </div>
+
+            <button type="button" class="btn btn-primary w-100 py-2 mb-2" id="sendSmsBtn">선택된 회원에게 전송하기</button>
+            <a href="index.html" class="btn btn-secondary w-100 py-2">돌아가기</a>
+            
+            <div class="text-end mt-2">
+                <button type="button" class="btn btn-sm btn-outline-danger" id="resetDataBtn" style="font-size: 0.75rem;">초기 회원 데이터로 복구</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // 기본 초기 데이터
+        const defaultMembers = [
+            { name: "김미영", phone: "010-9142-7982" },
+            { name: "김병철", phone: "010-3371-7107" },
+            { name: "김상우", phone: "010-9140-8020" },
+            { name: "김상철", phone: "010-8980-3564" },
+            { name: "김춘배", phone: "010-9321-1183" },
+            { name: "라찬숙", phone: "010-9535-4311" },
+            { name: "박건용", phone: "010-3535-0111" },
+            { name: "박영미", phone: "010-6866-8844" },
+            { name: "백기성", phone: "010-2031-8000" },
+            { name: "백상숙", phone: "010-6294-5982" },
+            { name: "안 호", phone: "010-6488-2412" },
+            { name: "유영식", phone: "010-2760-3519" },
+            { name: "전상준", phone: "010-9609-1688" },
+            { name: "전종철", phone: "010-4538-6724" },
+            { name: "전창섭", phone: "010-5958-9945" },
+            { name: "조병남", phone: "010-2276-6007" },
+            { name: "최영애", phone: "010-6623-5695" },
+            { name: "허남희", phone: "010-8586-2506" }
+        ];
+
+        let members = [];
+        let editIndex = -1; // 수정 모드 시 인덱스 저장용 (-1은 추가 모드)
+
+        // 브라우저의 로컬 저장소(localStorage)에서 데이터 불러오기
+        const savedData = localStorage.getItem('jikji35_members');
+        if (savedData) {
+            members = JSON.parse(savedData);
+        } else {
+            members = [...defaultMembers];
+        }
+
+        // 이름 기준 가나다 순으로 정렬하고 로컬 저장소에 저장하는 함수
+        function saveAndSortMembers() {
+            // 이름 가나다 순 정렬
+            members.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+            // 브라우저 메모리에 저장
+            localStorage.setItem('jikji35_members', JSON.stringify(members));
+        }
+
+        const tbody = document.getElementById('memberListBody');
+        const checkAll = document.getElementById('checkAll');
+        const toggleAddBtn = document.getElementById('toggleAddMemberBtn');
+        const toggleEditBtn = document.getElementById('toggleEditMemberBtn');
+        const addForm = document.getElementById('addMemberForm');
+        const nameInput = document.getElementById('newName');
+        const phoneInput = document.getElementById('newPhone');
+        const confirmBtn = document.getElementById('confirmAddBtn');
+        const deleteBtn = document.getElementById('deleteMemberBtn');
+
+        // 1. 테이블 렌더링 함수
+        function renderTable() {
+            saveAndSortMembers(); // 렌더링 전 정렬 보장
+            
+            tbody.innerHTML = '';
+            members.forEach((m, index) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>
+                        <input class="form-check-input member-check" type="checkbox" value="${index}" id="chk_${index}">
+                    </td>
+                    <td><label class="form-check-label w-100" for="chk_${index}">${m.name}</label></td>
+                    <td><label class="form-check-label w-100" for="chk_${index}">${m.phone}</label></td>
+                `;
+                tbody.appendChild(tr);
+            });
+            updateCheckAllState();
+        }
+
+        // 2. 전체 선택 / 해제
+        checkAll.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.member-check');
+            checkboxes.forEach(chk => chk.checked = this.checked);
+        });
+
+        // 3. 개별 체크 시 전체선택 상태 변경
+        tbody.addEventListener('change', function(e) {
+            if (e.target.classList.contains('member-check')) {
+                updateCheckAllState();
+            }
+        });
+
+        function updateCheckAllState() {
+            const checkboxes = document.querySelectorAll('.member-check');
+            const checkedBoxes = document.querySelectorAll('.member-check:checked');
+            checkAll.checked = (checkboxes.length > 0 && checkboxes.length === checkedBoxes.length);
+        }
+
+        // 4. 전화번호 자동 하이픈 기능 (-)
+        phoneInput.addEventListener('input', function(e) {
+            // 숫자만 남기기
+            let val = this.value.replace(/[^0-9]/g, '');
+            let res = '';
+            
+            if (val.length < 4) {
+                res = val;
+            } else if (val.length < 8) {
+                res = val.substr(0, 3) + '-' + val.substr(3);
+            } else {
+                res = val.substr(0, 3) + '-' + val.substr(3, 4) + '-' + val.substr(7, 4);
+            }
+            this.value = res;
+        });
+
+        // 5. 회원추가 버튼 
+        toggleAddBtn.addEventListener('click', () => {
+            editIndex = -1;
+            nameInput.value = '';
+            phoneInput.value = '';
+            confirmBtn.innerText = '확인 (추가)';
+            confirmBtn.classList.replace('btn-warning', 'btn-success');
+            deleteBtn.classList.add('hidden'); // 추가 모드에선 삭제 버튼 숨김
+            
+            addForm.classList.remove('hidden');
+        });
+
+        // 6. 회원수정 버튼
+        toggleEditBtn.addEventListener('click', () => {
+            const checkedBoxes = document.querySelectorAll('.member-check:checked');
+            if (checkedBoxes.length !== 1) {
+                alert("수정할 회원을 한 명만 체크해주세요.");
+                return;
+            }
+            
+            // 수정할 회원의 인덱스 가져오기
+            editIndex = parseInt(checkedBoxes[0].value);
+            const m = members[editIndex];
+            
+            nameInput.value = m.name;
+            phoneInput.value = m.phone;
+            
+            confirmBtn.innerText = '확인 (수정)';
+            confirmBtn.classList.replace('btn-success', 'btn-warning');
+            deleteBtn.classList.remove('hidden'); // 수정 모드에선 삭제 버튼 보이기
+            
+            addForm.classList.remove('hidden');
+        });
+
+        // 7. 삭제 버튼 클릭
+        deleteBtn.addEventListener('click', () => {
+            if (editIndex > -1 && confirm("정말 삭제하시겠습니까?")) {
+                members.splice(editIndex, 1);
+                alert("삭제되었습니다.");
+                
+                editIndex = -1;
+                renderTable();
+                addForm.classList.add('hidden');
+            }
+        });
+
+        // 8. 추가/수정 확인 버튼
+        confirmBtn.addEventListener('click', () => {
+            const nameVal = nameInput.value.trim();
+            const phoneVal = phoneInput.value.trim();
+
+            if (!nameVal || !phoneVal) {
+                alert("이름과 전화번호를 모두 입력해주세요.");
+                return;
+            }
+
+            if (editIndex === -1) {
+                // 추가 모드
+                members.push({ name: nameVal, phone: phoneVal });
+                alert(nameVal + " 회원이 추가되었습니다.");
+            } else {
+                // 수정 모드
+                members[editIndex].name = nameVal;
+                members[editIndex].phone = phoneVal;
+                alert("회원 정보가 수정되었습니다.");
+                editIndex = -1; // 모드 초기화
+            }
+
+            renderTable(); // 저장 및 정렬 렌더링
+            
+            // 폼 닫기 및 초기화
+            nameInput.value = '';
+            phoneInput.value = '';
+            addForm.classList.add('hidden');
+            confirmBtn.innerText = '확인 (추가)';
+            confirmBtn.classList.replace('btn-warning', 'btn-success');
+            deleteBtn.classList.add('hidden');
+        });
+
+        // 9. 전송하기 버튼 클릭 시 모바일 문자 앱 호출
+        document.getElementById('sendSmsBtn').addEventListener('click', () => {
+            const checkedBoxes = document.querySelectorAll('.member-check:checked');
+            if (checkedBoxes.length === 0) {
+                alert("문자를 보낼 회원을 선택해주세요.");
+                return;
+            }
+            
+            const msg = document.getElementById('messageContent').value;
+            let phones = [];
+            checkedBoxes.forEach(chk => {
+                const idx = chk.value;
+                const m = members[idx];
+                phones.push(m.phone.replace(/-/g, ''));
+            });
+
+            const phoneStr = phones.join(',');
+            const encodedMsg = encodeURIComponent(msg);
+            
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            let smsLink = 'sms:' + phoneStr;
+            if (msg) {
+                smsLink += (isIOS ? '&' : '?') + 'body=' + encodedMsg;
+            }
+            
+            window.location.href = smsLink;
+        });
+
+        // 10. 초기 데이터 복구
+        document.getElementById('resetDataBtn').addEventListener('click', () => {
+            if (confirm("모든 변경사항이 지워지고 초기 상태로 복구됩니다. 계속하시겠습니까?")) {
+                localStorage.removeItem('jikji35_members');
+                members = [...defaultMembers];
+                renderTable();
+                alert("초기화 되었습니다.");
+            }
+        });
+
+        // 초기 테이블 생성
+        renderTable();
+    </script>
+</body>
+</html>
