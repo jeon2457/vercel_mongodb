@@ -83,46 +83,8 @@
     </div>
 
     <script>
-        // 기본 초기 데이터
-        const defaultMembers = [
-            { name: "김미영", phone: "010-9142-7982" },
-            { name: "김병철", phone: "010-3371-7107" },
-            { name: "김상우", phone: "010-9140-8020" },
-            { name: "김상철", phone: "010-8980-3564" },
-            { name: "김춘배", phone: "010-9321-1183" },
-            { name: "라찬숙", phone: "010-9535-4311" },
-            { name: "박건용", phone: "010-3535-0111" },
-            { name: "박영미", phone: "010-6866-8844" },
-            { name: "백기성", phone: "010-2031-8000" },
-            { name: "백상숙", phone: "010-6294-5982" },
-            { name: "안 호", phone: "010-6488-2412" },
-            { name: "유영식", phone: "010-2760-3519" },
-            { name: "전상준", phone: "010-9609-1688" },
-            { name: "전종철", phone: "010-4538-6724" },
-            { name: "전창섭", phone: "010-5958-9945" },
-            { name: "조병남", phone: "010-2276-6007" },
-            { name: "최영애", phone: "010-6623-5695" },
-            { name: "허남희", phone: "010-8586-2506" }
-        ];
-
         let members = [];
         let editIndex = -1; // 수정 모드 시 인덱스 저장용 (-1은 추가 모드)
-
-        // 브라우저의 로컬 저장소(localStorage)에서 데이터 불러오기
-        const savedData = localStorage.getItem('jikji35_members');
-        if (savedData) {
-            members = JSON.parse(savedData);
-        } else {
-            members = [...defaultMembers];
-        }
-
-        // 이름 기준 가나다 순으로 정렬하고 로컬 저장소에 저장하는 함수
-        function saveAndSortMembers() {
-            // 이름 가나다 순 정렬
-            members.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-            // 브라우저 메모리에 저장
-            localStorage.setItem('jikji35_members', JSON.stringify(members));
-        }
 
         const tbody = document.getElementById('memberListBody');
         const checkAll = document.getElementById('checkAll');
@@ -134,10 +96,21 @@
         const confirmBtn = document.getElementById('confirmAddBtn');
         const deleteBtn = document.getElementById('deleteMemberBtn');
 
+        // 서버에서 데이터 불러오기
+        async function fetchMembers() {
+            try {
+                const response = await fetch('/api/sms-members');
+                if (!response.ok) throw new Error('서버 에러');
+                members = await response.json();
+                renderTable();
+            } catch (error) {
+                console.error('데이터를 불러오는데 실패했습니다:', error);
+                alert('데이터를 불러오는데 실패했습니다.');
+            }
+        }
+
         // 1. 테이블 렌더링 함수
         function renderTable() {
-            saveAndSortMembers(); // 렌더링 전 정렬 보장
-            
             tbody.innerHTML = '';
             members.forEach((m, index) => {
                 const tr = document.createElement('tr');
@@ -174,7 +147,6 @@
 
         // 4. 전화번호 자동 하이픈 기능 (-)
         phoneInput.addEventListener('input', function(e) {
-            // 숫자만 남기기
             let val = this.value.replace(/[^0-9]/g, '');
             let res = '';
             
@@ -195,7 +167,7 @@
             phoneInput.value = '';
             confirmBtn.innerText = '확인 (추가)';
             confirmBtn.classList.replace('btn-warning', 'btn-success');
-            deleteBtn.classList.add('hidden'); // 추가 모드에선 삭제 버튼 숨김
+            deleteBtn.classList.add('hidden');
             
             addForm.classList.remove('hidden');
         });
@@ -208,7 +180,6 @@
                 return;
             }
             
-            // 수정할 회원의 인덱스 가져오기
             editIndex = parseInt(checkedBoxes[0].value);
             const m = members[editIndex];
             
@@ -217,25 +188,33 @@
             
             confirmBtn.innerText = '확인 (수정)';
             confirmBtn.classList.replace('btn-success', 'btn-warning');
-            deleteBtn.classList.remove('hidden'); // 수정 모드에선 삭제 버튼 보이기
+            deleteBtn.classList.remove('hidden');
             
             addForm.classList.remove('hidden');
         });
 
         // 7. 삭제 버튼 클릭
-        deleteBtn.addEventListener('click', () => {
+        deleteBtn.addEventListener('click', async () => {
             if (editIndex > -1 && confirm("정말 삭제하시겠습니까?")) {
-                members.splice(editIndex, 1);
-                alert("삭제되었습니다.");
-                
-                editIndex = -1;
-                renderTable();
-                addForm.classList.add('hidden');
+                const memberId = members[editIndex]._id;
+                try {
+                    const response = await fetch('/api/sms-members/' + memberId, {
+                        method: 'DELETE'
+                    });
+                    if (!response.ok) throw new Error('삭제 실패');
+                    
+                    alert("삭제되었습니다.");
+                    editIndex = -1;
+                    addForm.classList.add('hidden');
+                    fetchMembers(); // 다시 불러오기
+                } catch (error) {
+                    alert('삭제 중 오류가 발생했습니다.');
+                }
             }
         });
 
         // 8. 추가/수정 확인 버튼
-        confirmBtn.addEventListener('click', () => {
+        confirmBtn.addEventListener('click', async () => {
             const nameVal = nameInput.value.trim();
             const phoneVal = phoneInput.value.trim();
 
@@ -244,27 +223,42 @@
                 return;
             }
 
-            if (editIndex === -1) {
-                // 추가 모드
-                members.push({ name: nameVal, phone: phoneVal });
-                alert(nameVal + " 회원이 추가되었습니다.");
-            } else {
-                // 수정 모드
-                members[editIndex].name = nameVal;
-                members[editIndex].phone = phoneVal;
-                alert("회원 정보가 수정되었습니다.");
-                editIndex = -1; // 모드 초기화
-            }
+            try {
+                if (editIndex === -1) {
+                    // 추가 모드
+                    const response = await fetch('/api/sms-members', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: nameVal, phone: phoneVal })
+                    });
+                    if (!response.ok) throw new Error('추가 실패');
+                    alert(nameVal + " 회원이 추가되었습니다.");
+                } else {
+                    // 수정 모드
+                    const memberId = members[editIndex]._id;
+                    const response = await fetch('/api/sms-members/' + memberId, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: nameVal, phone: phoneVal })
+                    });
+                    if (!response.ok) throw new Error('수정 실패');
+                    alert("회원 정보가 수정되었습니다.");
+                    editIndex = -1;
+                }
 
-            renderTable(); // 저장 및 정렬 렌더링
-            
-            // 폼 닫기 및 초기화
-            nameInput.value = '';
-            phoneInput.value = '';
-            addForm.classList.add('hidden');
-            confirmBtn.innerText = '확인 (추가)';
-            confirmBtn.classList.replace('btn-warning', 'btn-success');
-            deleteBtn.classList.add('hidden');
+                // 폼 닫기 및 초기화
+                nameInput.value = '';
+                phoneInput.value = '';
+                addForm.classList.add('hidden');
+                confirmBtn.innerText = '확인 (추가)';
+                confirmBtn.classList.replace('btn-warning', 'btn-success');
+                deleteBtn.classList.add('hidden');
+
+                // 데이터 갱신
+                fetchMembers();
+            } catch (error) {
+                alert('저장 중 오류가 발생했습니다.');
+            }
         });
 
         // 9. 전송하기 버튼 클릭 시 모바일 문자 앱 호출
@@ -296,17 +290,22 @@
         });
 
         // 10. 초기 데이터 복구
-        document.getElementById('resetDataBtn').addEventListener('click', () => {
+        document.getElementById('resetDataBtn').addEventListener('click', async () => {
             if (confirm("모든 변경사항이 지워지고 초기 상태로 복구됩니다. 계속하시겠습니까?")) {
-                localStorage.removeItem('jikji35_members');
-                members = [...defaultMembers];
-                renderTable();
-                alert("초기화 되었습니다.");
+                try {
+                    const response = await fetch('/api/sms-members/reset', { method: 'POST' });
+                    if (!response.ok) throw new Error('초기화 실패');
+                    members = await response.json();
+                    renderTable();
+                    alert("초기화 되었습니다.");
+                } catch (error) {
+                    alert('초기화 중 오류가 발생했습니다.');
+                }
             }
         });
 
-        // 초기 테이블 생성
-        renderTable();
+        // 초기 로드 시 서버에서 데이터 가져오기
+        fetchMembers();
     </script>
 </body>
 </html>
