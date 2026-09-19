@@ -223,6 +223,10 @@
                 return;
             }
 
+            // 버튼 비활성화 (중복 클릭 방지)
+            confirmBtn.disabled = true;
+            confirmBtn.innerText = '저장 중...';
+
             try {
                 if (editIndex === -1) {
                     // 추가 모드
@@ -231,7 +235,10 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ name: nameVal, phone: phoneVal })
                     });
-                    if (!response.ok) throw new Error('추가 실패');
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        throw new Error(errData.error || `서버 오류 (${response.status})`);
+                    }
                     alert(nameVal + " 회원이 추가되었습니다.");
                 } else {
                     // 수정 모드
@@ -241,7 +248,10 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ name: nameVal, phone: phoneVal })
                     });
-                    if (!response.ok) throw new Error('수정 실패');
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        throw new Error(errData.error || `서버 오류 (${response.status})`);
+                    }
                     alert("회원 정보가 수정되었습니다.");
                     editIndex = -1;
                 }
@@ -250,14 +260,22 @@
                 nameInput.value = '';
                 phoneInput.value = '';
                 addForm.classList.add('hidden');
-                confirmBtn.innerText = '확인 (추가)';
-                confirmBtn.classList.replace('btn-warning', 'btn-success');
                 deleteBtn.classList.add('hidden');
 
-                // 데이터 갱신
-                fetchMembers();
+                // DB에서 최신 데이터 다시 불러오기
+                await fetchMembers();
+
             } catch (error) {
-                alert('저장 중 오류가 발생했습니다.');
+                alert('저장 실패: ' + error.message);
+            } finally {
+                // 버튼 원상 복구
+                confirmBtn.disabled = false;
+                if (editIndex === -1) {
+                    confirmBtn.innerText = '확인 (추가)';
+                    confirmBtn.classList.replace('btn-warning', 'btn-success');
+                } else {
+                    confirmBtn.innerText = '확인 (수정)';
+                }
             }
         });
 
